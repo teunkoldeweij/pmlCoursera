@@ -1,0 +1,137 @@
+---
+title: "Project Coursera"
+author: "Teun Koldeweij"
+date: "20-1-2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## libs
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(repmis)
+
+## Loading the data
+training <- read.csv("C:/Users/Teun/Downloads/pml-training.csv", na.strings = c("NA", ""))
+testing <- read.csv("C:/Users/Teun/Downloads/pml-testing.csv", na.strings = c("NA", ""))
+
+
+```
+
+# Data inspection
+
+A quick inspection of the data Dimensions with the dim() function
+ 
+### training data
+
+rows x columns
+
+`r dim(training)`
+
+### testing data
+
+rows x columns
+
+`r dim(testing)`
+
+# Clean data
+
+We delete every column that has NA values. This is a bit rigourus but allows us to come to a condensed dataset more quickly.
+
+```{r}
+
+training <- training[ , colSums(is.na(training)) == 0]
+testing <- testing[, colSums(is.na(testing)) == 0]
+
+```
+
+Now we may want to check current predictors, and filter out those that do not seem to be nessecary for prediction.
+A simple look at the colNames reveals plenty
+
+```{r}
+colnames(training)
+
+```
+The first seven predictors are concerned with variables other than our desired variables for measurement
+The choice is made to filter out these. We could also have excluded these in our training model. 
+This would however, make our coding unneccesarily complex and long.
+
+```{r}
+training_data <- training[ , -c(1:7)]
+testing_data <- testing[ , -c(1:7)]
+
+```
+
+# Data Splitting
+
+To get the out of sample errors, we split our current trainingset in two. One part is reserved for the training set (70%), and one part will be reserved for the validation set (30%).
+
+```{r}
+set.seed(7826) 
+partition <- createDataPartition(training_data$classe, p=0.7, times = 1, list = F)
+train <- training_data[partition, ]
+validation <- training_data[-partition, ]
+
+``` 
+
+# Predictive algoritms
+
+As a first algorithm we fit a classfication tree. Because of the interpretability, it is a great first model to apply and get a sense of the data. Instead of using 10 folds, we use 5 folds on the data. This is more convenient when running this model regularly in terms of computing time.
+
+```{r}
+
+control <- trainControl(method = "cv", number =5)
+train_rpart <- train(classe ~ ., data = train, method = "rpart", trControl = control)
+print(train_rpart, digits = 2)
+par(mar = c(1, 1, 1, 1))
+plot(train_rpart$finalModel)
+text(train_rpart$finalModel)
+``` 
+
+The plotted model reveals the initial decision rules made by the algorithm. No time was spent on making this plot more appealing.
+Now, we can use this trained model on our validation set.
+```{r}
+predict_rpart <- predict(train_rpart, validation)
+(confusion_rpart <- confusionMatrix(validation$classe, predict_rpart))
+(accuracy_rpart <- confusion_rpart$overall[1])
+```
+
+`r accuracy_rpart` is our accurary and also represents our out of sample error as 1 - `r accuracy_rpart` 
+This is not a very good predictive model and thus we should look for other options.
+
+# Advanced Classification Tree - Random Forest
+
+Because a single classification tree was not able to product a very good model. We apply a advanced classification tree technique, the random forest. We use the same control mechanics as with the single tree. 5 folds is really helping in a faster calculation here.
+
+```{r}
+train_rf <- train(classe ~ ., data = train, method = "rf", trControl = control)
+print(train_rf, digits = 2)
+predict_rf <- predict(train_rf, validation)
+(conf_rf <- confusionMatrix(validation$classe, predict_rf))
+(accuracy_rf <- conf_rf$overall[1])
+```
+
+`r accuracy_rf` is our accurary and also represents our out of sample error as 1 - `r accuracy_rf` 
+This is a much better predictive model in comparison with our single tree. We can be confident that this model with perform well on our test set aswell.
+
+# Final prediction on our Test Set.
+
+```{r}
+(predict_test <- predict(train_rf, testing))
+test_A <- predict_test == "A"
+amount_A <- mean(test_A)
+```
+
+Above you see the predicted classes from our test set by our random forest model
+
+
+# Conclusion and remarks
+
+The prediction model shows the predicted classe: A to E. It seems only `r amount_A` of the subjects is correctly performing the excersizes.
+
+We have now created a algorithm to predict the class in which a subject wil fall, thus finalizing this excersice. 
